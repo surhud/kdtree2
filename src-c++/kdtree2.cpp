@@ -120,14 +120,14 @@ void KDTree::build_tree() {
 }
 
 KDTreeNode* KDTree::build_tree_for_range(int l, int u, KDTreeNode* parent) {
-  // recursive function to build 
-  KDTreeNode* node = new KDTreeNode(dim);
-  // the newly created node. 
 
   if (u<l) {
     return(NULL); // no data in this node. 
   }
       
+  // recursive function to build 
+  KDTreeNode* node = new KDTreeNode(dim);
+  // the newly created node. 
 
   if ((u-l) <= bucketsize) {
     // create a terminal node. 
@@ -703,7 +703,7 @@ void KDTreeNode::process_terminal_node(SearchRecord& sr) {
       if(early_exit) continue; // next iteration of mainloop
     } // end if rearrange. 
     
-    if (centeridx > 0) {
+    if (centeridx >= 0) {
       // we are doing decorrelation interval
       if (abs(indexofi-centeridx) < correltime) continue; // skip this point. 
     }
@@ -793,7 +793,7 @@ void KDTreeNode::process_terminal_node_fixedball(SearchRecord& sr) {
       if(early_exit) continue; // next iteration of mainloop
     } // end if rearrange. 
     
-    if (centeridx > 0) {
+    if (centeridx >= 0) {
       // we are doing decorrelation interval
       if (abs(indexofi-centeridx) < correltime) continue; // skip this point. 
     }
