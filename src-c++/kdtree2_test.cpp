@@ -21,6 +21,7 @@ float random_variate() {
 // define, for convenience a 2d array of floats. 
 //
 typedef boost::multi_array<float,2> array2dfloat;
+typedef boost::multi_array<float,1> array1dfloat;
 
 
 #include <ctime>
@@ -66,9 +67,12 @@ void time_random_searches(kdtree2::KDTree* tree, int nn) {
 int main() {
   array2dfloat data(boost::extents[10][3]);  // declare a 10000 x 3 array.
   array2dfloat realdata; 
+  array1dfloat xper(boost::extents[3]); 
+  array1dfloat realxper; 
 
   // notice it is in C-standard layout. 
   kdtree2::KDTree* tree;
+  kdtree2::KDTreePeriod* period;
   kdtree2::KDTreeResultVector res; 
   int N, dim;
 
@@ -77,7 +81,9 @@ int main() {
       for (int j=0; j<3; j++)
 	data[i][j] = static_cast<float> (3*i+j);
     }
-    tree = new kdtree2::KDTree(data,true); 
+      for (int j=0; j<3; j++)
+	xper[j] = static_cast<float> (1.0);
+    tree = new kdtree2::KDTree(data,xper,true); 
     
     //    tree->dump_data(); 
     //data[0][0]=666.0;  // mutate it underneath.  DO NOT DO THIS IN REAL USE
@@ -94,13 +100,16 @@ int main() {
   scanf("%d %d",&N,&dim);
   printf("I found N=%d,dim=%d\n",N,dim);
   realdata.resize(boost::extents[N][dim]); 
+  realxper.resize(boost::extents[dim]); 
     
   for (int i=0; i<N; i++) {
-    for (int j=0; j<dim; j++) 
+    for (int j=0; j<dim; j++)
       realdata[i][j] = random_variate();
   }
-  
-  tree = new kdtree2::KDTree(realdata,true);
+      for (int j=0; j<3; j++)
+	realxper[j] = static_cast<float> (1.0);
+
+  tree = new kdtree2::KDTree(realdata,realxper,true);
   tree->sort_results = true;
   std::cout << "Tree created, now testing against brute force..."; 
   {

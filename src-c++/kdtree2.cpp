@@ -4,7 +4,6 @@
 // Licensed under the Academic Free License version 1.1 found in file LICENSE
 // with additional provisions in that same file.
 
-
 #include "kdtree2.hpp"
 
 #include <algorithm> 
@@ -13,8 +12,12 @@
 namespace kdtree2 {
 // utility
 
-inline float squared(const float x) {
-  return(x*x);
+inline float squared(const float x, const float per) {
+    float y=x;
+  if(per>0.0){
+    if(y>per/2.) y=per-y;
+  }
+    return(y*y);
 }
 
 inline void swap(int& a, int&b) {
@@ -69,8 +72,9 @@ float KDTreeResultVector::replace_maxpri_elt_return_new_maxpri(KDTreeResult& e) 
 //
 
 // constructor
-KDTree::KDTree(KDTreeArray& data_in,bool rearrange_in,int dim_in)
+KDTree::KDTree(KDTreeArray& data_in,KDTreePeriod& xp,bool rearrange_in,int dim_in)
   : the_data(data_in),
+    period(xp),
     N  ( data_in.shape()[0] ),
     dim( data_in.shape()[1] ),
     sort_results(false),
@@ -397,6 +401,7 @@ private:
 
   KDTreeResultVector& result;  // results
   const KDTreeArray* data; 
+  const KDTreePeriod period; 
   const std::vector<int>& ind; 
   // constructor
 
@@ -406,7 +411,8 @@ public:
     qv(qv_in),
     result(result_in),
     data(tree_in.data),
-    ind(tree_in.ind) 
+    ind(tree_in.ind),
+    period(tree_in.period)
   {
     dim = tree_in.dim;
     rearrange = tree_in.rearrange;
@@ -425,7 +431,7 @@ void KDTree::n_nearest_brute_force(std::vector<float>& qv, int nn, KDTreeResultV
     float dis = 0.0;
     KDTreeResult e; 
     for (int j=0; j<dim; j++) {
-      dis += squared( the_data[i][j] - qv[j]);
+      dis += squared( the_data[i][j] - qv[j], period[j]);
     }
     e.dis = dis;
     e.idx = i;
@@ -588,6 +594,29 @@ KDTreeNode::~KDTreeNode() {
   // will be automatically deleted in their own destructors. 
 }
 
+inline float dis_from_bnd(float x, float amin, float amax, float per) {
+  if(per<0.0){
+    if (x > amax) {
+      return(x-amax); 
+    } else if (x < amin)
+      return (amin-x);
+    else
+      return 0.0;
+  }else{
+      if(x>amin&&x<amax){
+	  return 0.0;
+      }
+      float dx1=fabs(x-amax);
+      float dx2=fabs(x-amin);
+      if(dx1>per/2.)dx1=per-dx1;
+      if(dx2>per/2.)dx2=per-dx2;
+      if(dx1<dx2)
+	  return dx1;
+      return dx2;
+  }
+  
+}
+
 
 void KDTreeNode::search(SearchRecord& sr) {
   // the core search routine.
@@ -599,6 +628,7 @@ void KDTreeNode::search(SearchRecord& sr) {
   // takes more computational time, the overall performance may not
   // be improved in actual run time. 
   //
+  // Incorporated periodic boundary conditions: SM
 
   if ( (left == NULL) && (right == NULL)) {
     // we are on a terminal node
@@ -608,41 +638,74 @@ void KDTreeNode::search(SearchRecord& sr) {
       process_terminal_node(sr);
     }
   } else {
-    KDTreeNode *ncloser, *nfarther;
 
-    float extra;
-    float qval = sr.qv[cut_dim]; 
-    // value of the wall boundary on the cut dimension. 
-    if (qval < cut_val) {
-      ncloser = left;
-      nfarther = right;
-      extra = cut_val_right-qval;
-    } else {
-      ncloser = right;
-      nfarther = left;
-      extra = qval-cut_val_left; 
-    };
+    if(sr.period[cut_dim]<0.0){
+      KDTreeNode *ncloser, *nfarther;
 
-    if (ncloser != NULL) ncloser->search(sr);
+      float extra;
+      float qval = sr.qv[cut_dim]; 
+      // value of the wall boundary on the cut dimension. 
+      if (qval < cut_val) {
+        ncloser = left;
+        nfarther = right;
+        extra = cut_val_right-qval;
+      } else {
+        ncloser = right;
+        nfarther = left;
+        extra = qval-cut_val_left; 
+      };
+ 
+      if (ncloser != NULL) ncloser->search(sr);
+ 
+      if ((nfarther != NULL) && (squared(extra,sr.period[cut_dim]) < sr.ballsize)) {
+        // first cut
+        if (nfarther->box_in_search_range(sr)) {
+          nfarther->search(sr); 
+        }      
+      }
+    }else
+    {
+      if(false){
+        // Search with periodic conditions. Check for box in search
+        // range. This is a slow method.
+        KDTreeNode *lnode, *rnode;
+        lnode=left;
+        rnode=right;
+        if(lnode!=NULL ){
+           if(lnode->box_in_search_range(sr)) lnode->search(sr);
+        }
+        if(rnode!=NULL){
+           if(rnode->box_in_search_range(sr)) rnode->search(sr);
+        }
+      }else{
+        KDTreeNode *ncloser, *nfarther;
+	float extra;
+	  /// First get the distance from band
+          float qval = sr.qv[cut_dim]; 
+	  float dl=dis_from_bnd(qval,left->box[cut_dim].lower,left->box[cut_dim].upper,sr.period[cut_dim]);
+	  float dr=dis_from_bnd(qval,right->box[cut_dim].lower,right->box[cut_dim].upper,sr.period[cut_dim]);
+	  if(fabs(dl)<fabs(dr)){
+	      ncloser=left;
+	      nfarther=right;
+	      extra=dr;
+	  }else{
+	      ncloser=right;
+	      nfarther=left;
+	      extra=dl;
+	  }
+	  if (ncloser != NULL) ncloser->search(sr);
+	  if ((nfarther != NULL) && (squared(extra,sr.period[cut_dim])
+	      < sr.ballsize)) {
+	    // first cut
+	    if (nfarther->box_in_search_range(sr)) {
+	      nfarther->search(sr); 
+            }      
 
-    if ((nfarther != NULL) && (squared(extra) < sr.ballsize)) {
-      // first cut
-      if (nfarther->box_in_search_range(sr)) {
-	nfarther->search(sr); 
-      }      
+	  }
+      }
     }
   }
-}
 
-
-inline float dis_from_bnd(float x, float amin, float amax) {
-  if (x > amax) {
-    return(x-amax); 
-  } else if (x < amin)
-    return (amin-x);
-  else
-    return 0.0;
-  
 }
 
 inline bool KDTreeNode::box_in_search_range(SearchRecord& sr) {
@@ -655,7 +718,7 @@ inline bool KDTreeNode::box_in_search_range(SearchRecord& sr) {
   float dis2 =0.0; 
   float ballsize = sr.ballsize; 
   for (int i=0; i<dim;i++) {
-    dis2 += squared(dis_from_bnd(sr.qv[i],box[i].lower,box[i].upper));
+    dis2 += squared(dis_from_bnd(sr.qv[i],box[i].lower,box[i].upper,sr.period[i]),sr.period[i]);
     if (dis2 > ballsize)
       return(false);
   }
@@ -693,7 +756,7 @@ void KDTreeNode::process_terminal_node(SearchRecord& sr) {
       early_exit = false;
       dis = 0.0;
       for (int k=0; k<dim; k++) {
-	dis += squared(data[i][k] - sr.qv[k]);
+	dis += squared(data[i][k] - sr.qv[k],sr.period[k]);
 	if (dis > ballsize) {
 	  early_exit=true; 
 	  break;
@@ -715,7 +778,7 @@ void KDTreeNode::process_terminal_node(SearchRecord& sr) {
       early_exit = false;
       dis = 0.0;
       for (int k=0; k<dim; k++) {
-	dis += squared(data[indexofi][k] - sr.qv[k]);
+	dis += squared(data[indexofi][k] - sr.qv[k],sr.period[k]);
 	if (dis > ballsize) {
 	  early_exit= true; 
 	  break;
@@ -783,7 +846,7 @@ void KDTreeNode::process_terminal_node_fixedball(SearchRecord& sr) {
       early_exit = false;
       dis = 0.0;
       for (int k=0; k<dim; k++) {
-	dis += squared(data[i][k] - sr.qv[k]);
+	dis += squared(data[i][k] - sr.qv[k],sr.period[k]);
 	if (dis > ballsize) {
 	  early_exit=true; 
 	  break;
@@ -805,7 +868,7 @@ void KDTreeNode::process_terminal_node_fixedball(SearchRecord& sr) {
       early_exit = false;
       dis = 0.0;
       for (int k=0; k<dim; k++) {
-	dis += squared(data[indexofi][k] - sr.qv[k]);
+	dis += squared(data[indexofi][k] - sr.qv[k],sr.period[k]);
 	if (dis > ballsize) {
 	  early_exit= true; 
 	  break;

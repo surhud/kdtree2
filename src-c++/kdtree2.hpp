@@ -22,6 +22,7 @@
 #include <boost/array.hpp>
 namespace kdtree2 {
 typedef boost::multi_array<float,2>             KDTreeArray;
+typedef boost::multi_array<float,1>             KDTreePeriod;
 typedef boost::const_multi_array_ref<float,2>   KDTreeROArray;  // read only ref
 
 
@@ -95,6 +96,7 @@ public:
   int dim; //
   bool sort_results;  // USERS set to 'true'. 
   const bool rearrange; // are we rearranging? 
+  const KDTreePeriod& period; // Is the box periodic?
 
 public:
   //
@@ -105,7 +107,7 @@ public:
   // first 'dim_in' components for definition of nearest neighbors.
   //
 
-  KDTree(KDTreeArray& data_in,bool rearrange_in = true,int dim_in=-1);
+  KDTree(KDTreeArray& data_in, KDTreePeriod& xp, bool rearrange_in = true,int dim_in=-1);
 
   // destructor
   ~KDTree();
