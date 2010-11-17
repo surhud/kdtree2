@@ -170,9 +170,30 @@ KDTreeNode* KDTree::build_tree_for_range(int l, int u, KDTreeNode* parent) {
       }
     }
 
+    // Check if c==-1. Call this a final bucket in this case
+    // Tree traversal is slow in case this bucket needs to be opened.
+    // Can be improved by flagging such a node.
+    if(c==-1){
+    // create a terminal node. 
+
+    // always compute true bounding box for terminal node. 
+      for (int i=0;i<dim;i++) {
+        spread_in_coordinate(i,l,u,node->box[i]);
+      }
+      
+      node->cut_dim = 0; 
+      node->cut_val = 0.0;
+      node->l = l;
+      node->u = u;
+      node->left = node->right = NULL;
+
+      return(node);
+    
+    }
+
     // 
     // now, c is the identity of which coordinate has the greatest spread
-    //
+    // 
 
     if (false) {
       m = (l+u)/2;
