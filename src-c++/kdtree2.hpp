@@ -205,6 +205,9 @@ private:
   void search(SearchRecord& sr); 
   // recursive innermost core routine for searching.. 
 
+  int count(SearchRecord& sr); 
+  // recursive innermost core routine for counting.. 
+
   bool box_in_search_range(SearchRecord& sr);
   // return true if the bounding box for this node is within the
   // search range given by the searchvector and maximum ballsize in 'sr'. 
@@ -214,6 +217,7 @@ private:
   // for processing final buckets. 
   void process_terminal_node(SearchRecord& sr);
   void process_terminal_node_fixedball(SearchRecord& sr);
+  int process_terminal_node_fixedball_count(SearchRecord& sr);
 
 
 };

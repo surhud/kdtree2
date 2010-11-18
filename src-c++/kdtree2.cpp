@@ -514,8 +514,12 @@ int KDTree::r_count(std::vector<float>& qv, float r2) {
     sr.nn = 0; 
     sr.ballsize = r2; 
     
-    root->search(sr); 
-    return(result.size());
+    int count=0;
+    //root->search(sr); 
+    //count=result.size();
+
+    count=root->count(sr);
+    return(count);
   }
 
   
@@ -615,6 +619,125 @@ inline float dis_from_bnd(float x, float amin, float amax, float per) {
       return dx2;
   }
   
+}
+
+int KDTreeNode::count(SearchRecord& sr) {
+  // the core count routine.
+  // This uses multiple criteria to decide whether to recursively
+  // count the secondary nodes or just add up the particles.
+
+  int count=0;
+
+  /// First check if the farthest point in the bbox is closer than R,
+  //  if so then directly return the number of particles contained in
+  //  the node.This should speed up large R calculations.
+
+  double dist=0.;
+  for(int i=0;i<sr.dim;i++)
+  {
+      /// Always consider the non-periodic bounding box
+      double dx2i=squared(box[i].lower-sr.qv[i],-1.);
+      double dx2i_2=squared(box[i].upper-sr.qv[i],-1.);
+     // double dx2i=squared(box[i].lower-sr.qv[i],sr.period[i]);
+     // double dx2i_2=squared(box[i].upper-sr.qv[i],sr.period[i]);
+      if(dx2i_2>dx2i) dx2i=dx2i_2;
+      dist+=dx2i;
+  }
+ 
+  if(dist<sr.ballsize){
+      /// All points are inside, so just return u-l+1
+      int centeridx = sr.centeridx;
+      count=u-l+1;
+      for(int k=l;k<=u;k++){
+          if(centeridx==sr.ind[k]){
+              count=u-l;
+              break;
+          }
+      }
+  }else
+  {
+
+    if ( (left == NULL) && (right == NULL)) {
+      // we are on a terminal node
+      if (sr.nn == 0) {
+        count=process_terminal_node_fixedball_count(sr);
+      } else {
+        //process_terminal_node(sr);
+        std::cout<<"Cant count with fixed sr.nn"<<std::endl;
+        exit(0);
+      }
+    } else {
+ 
+      if(sr.period[cut_dim]<0.0){
+        KDTreeNode *ncloser, *nfarther;
+ 
+        float extra;
+        float qval = sr.qv[cut_dim]; 
+        // value of the wall boundary on the cut dimension. 
+        if (qval < cut_val) {
+          ncloser = left;
+          nfarther = right;
+          extra = cut_val_right-qval;
+        } else {
+          ncloser = right;
+          nfarther = left;
+          extra = qval-cut_val_left; 
+        };
+  
+        if (ncloser != NULL) count=ncloser->count(sr);
+  
+        if ((nfarther != NULL) && (squared(extra,sr.period[cut_dim]) < sr.ballsize)) {
+          // first cut
+          if (nfarther->box_in_search_range(sr)) {
+            count=count+nfarther->count(sr); 
+          }      
+        }
+      }else
+      {
+        if(false){
+          // Search with periodic conditions. Check for box in search
+          // range. This is a slow method.
+          KDTreeNode *lnode, *rnode;
+          lnode=left;
+          rnode=right;
+          if(lnode!=NULL ){
+             if(lnode->box_in_search_range(sr)) lnode->search(sr);
+          }
+          if(rnode!=NULL){
+             if(rnode->box_in_search_range(sr)) rnode->search(sr);
+          }
+        }else{
+          KDTreeNode *ncloser, *nfarther;
+          float extra;
+            /// First get the distance from band
+            float qval = sr.qv[cut_dim]; 
+            float dl=dis_from_bnd(qval,left->box[cut_dim].lower,left->box[cut_dim].upper,sr.period[cut_dim]);
+            float dr=dis_from_bnd(qval,right->box[cut_dim].lower,right->box[cut_dim].upper,sr.period[cut_dim]);
+            if(fabs(dl)<fabs(dr)){
+                ncloser=left;
+                nfarther=right;
+                extra=dr;
+            }else{
+                ncloser=right;
+                nfarther=left;
+                extra=dl;
+            }
+            if (ncloser != NULL) count=ncloser->count(sr);
+            if ((nfarther != NULL) && (squared(extra,sr.period[cut_dim])
+                < sr.ballsize)) {
+              // first cut
+              if (nfarther->box_in_search_range(sr)) {
+                count=count+nfarther->count(sr); 
+              }      
+ 
+            }
+        }
+      }
+    }
+  }
+
+  return count;
+
 }
 
 
@@ -891,4 +1014,66 @@ void KDTreeNode::process_terminal_node_fixedball(SearchRecord& sr) {
 
   }
 }
+
+int KDTreeNode::process_terminal_node_fixedball_count(SearchRecord& sr) {
+  int centeridx  = sr.centeridx;
+  int correltime = sr.correltime;
+  int dim        = sr.dim;
+  float ballsize = sr.ballsize;
+  bool rearrange = sr.rearrange; 
+  const KDTreeArray& data = *sr.data;
+  int count=0;
+
+  for (int i=l; i<=u;i++) {
+    int indexofi = sr.ind[i]; 
+    float dis;
+    bool early_exit; 
+
+    if (rearrange) {
+      early_exit = false;
+      dis = 0.0;
+      for (int k=0; k<dim; k++) {
+	dis += squared(data[i][k] - sr.qv[k],sr.period[k]);
+	if (dis > ballsize) {
+	  early_exit=true; 
+	  break;
+	}
+      }
+      if(early_exit) continue; // next iteration of mainloop
+      // why do we do things like this?  because if we take an early
+      // exit (due to distance being too large) which is common, then
+      // we need not read in the actual point index, thus saving main
+      // memory bandwidth.  If the distance to point is less than the
+      // ballsize, though, then we need the index.
+      //
+      indexofi = sr.ind[i];
+    } else {
+      // 
+      // but if we are not using the rearranged data, then
+      // we must always 
+      indexofi = sr.ind[i];
+      early_exit = false;
+      dis = 0.0;
+      for (int k=0; k<dim; k++) {
+	dis += squared(data[indexofi][k] - sr.qv[k],sr.period[k]);
+	if (dis > ballsize) {
+	  early_exit= true; 
+	  break;
+	}
+      }
+      if(early_exit) continue; // next iteration of mainloop
+    } // end if rearrange. 
+    
+    if (centeridx >= 0) {
+      // we are doing decorrelation interval
+      if (abs(indexofi-centeridx) < correltime) continue; // skip this point. 
+    }
+
+    // If we are here we need to add the point
+    count++;
+
+  }
+  return count;
+}
+
 } // namespace kdtee2

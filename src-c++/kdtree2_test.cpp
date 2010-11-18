@@ -135,7 +135,7 @@ int main() {
   }
   std::cout << "\nTesting complete.  Now testing timing...\n";
   tree->sort_results = false;
-
+  
   {
 
     int nnarray[] = {1,5,10,25,500} ;
@@ -144,6 +144,22 @@ int main() {
     }
     
   }
+
+  /* Tests for the count routine
+  {
+
+    std::vector<float> query(dim);
+    float rrarray[] = {0.05,0.10,0.15,0.2} ;
+    for (int i=0; i< 4; i++) {
+      for (int j=0; j<dim; j++) query[j] = random_variate(); 
+	int count=tree->r_count(query,rrarray[i]);
+	for(int j=0;j<dim;j++)
+	    std::cout<<query[j]<<" ";
+	std::cout<<count<<std::endl;
+    }
+    
+  }
+  */
 
 
 }
