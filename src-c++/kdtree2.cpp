@@ -569,8 +569,12 @@ int KDTree::r_count_around_point(int idxin, int correltime, float r2)
     sr.correltime = correltime;
     sr.ballsize = r2; 
     sr.nn = 0; 
-    root->search(sr); 
-    return(result.size());
+    int count;
+    //root->search(sr); 
+    //count=result.size();
+
+    count=root->count(sr);
+    return(count);
   }
 
   
