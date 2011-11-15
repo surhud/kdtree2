@@ -13,7 +13,7 @@ namespace kdtree2 {
 // utility
 
 inline float squared(const float x, const float per) {
-    float y=x;
+    float y=fabs(x);
   if(per>0.0){
     if(y>per/2.) y=per-y;
   }
